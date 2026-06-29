@@ -21,13 +21,12 @@ def decode_base64(data):
     return base64.b64decode(data).decode('utf-8', errors='ignore')
 
 def fetch_and_deduplicate():
-    print("Phase 1: Fetching and deduplicating configs (Strict Mode)...")
-    configs = set()
-    proxies = None 
+    print("Phase 1: Fetching and deduplicating configs (Deep Mode)...")
+    configs_map = {} # استفاده از دیکشنری برای فیلتر کردن
     
     for url in SUBSCRIPTION_URLS:
         try:
-            resp = requests.get(url, proxies=proxies, timeout=10)
+            resp = requests.get(url, proxies=None, timeout=10)
             text = resp.text
             if '://' not in text:
                 text = decode_base64(text)
@@ -35,13 +34,34 @@ def fetch_and_deduplicate():
             links = re.finditer(r'(vless|vmess)://[^\s]+', text)
             for match in links:
                 raw_link = match.group(0)
-                clean_link = raw_link.split('#')[0]
-                configs.add(clean_link)
+                clean_link = raw_link.split('#')[0].replace('%0A', '').replace('%0D', '').strip()
+                
+                # --- منطق هوشمند حذف تکراری ---
+                parsed = urlparse(clean_link)
+                # استخراج پارامترهای کلیدی برای تشخیص تکراری بودن (به جز IP و Port)
+                # در VLESS: host, path, uuid(username), type
+                # در VMESS: host, path
+                if clean_link.startswith('vless://'):
+                    params = parse_qs(parsed.query)
+                    fingerprint = f"vless|{parsed.username}|{params.get('host', [''])[0]}|{params.get('path', [''])[0]}"
+                else: # VMESS
+                    encoded_json = clean_link[8:]
+                    try:
+                        data = json.loads(decode_base64(encoded_json))
+                        fingerprint = f"vmess|{data.get('id')}|{data.get('host', '')}|{data.get('path', '')}"
+                    except:
+                        fingerprint = clean_link # اگر دیکد نشد، همون لینک رو مبنا قرار بده
+                
+                # اگر این اثرانگشت قبلاً نبوده، اضافه کن
+                if fingerprint not in configs_map:
+                    configs_map[fingerprint] = clean_link
+                    
         except Exception as e:
             print(f"Failed to fetch {url}: {e}")
             
-    print(f"Total unique configs found (ignoring names): {len(configs)}")
-    return list(configs)
+    unique_configs = list(configs_map.values())
+    print(f"Total unique configs found (Deep Mode): {len(unique_configs)}")
+    return unique_configs
 
 def get_host_port(uri):
     try:
