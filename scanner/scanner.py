@@ -21,7 +21,7 @@ def decode_base64(data):
     return base64.b64decode(data).decode('utf-8', errors='ignore')
 
 def fetch_and_deduplicate():
-    print("Phase 1: Fetching and deduplicating configs...")
+    print("Phase 1: Fetching and deduplicating configs (Strict Mode)...")
     configs = set()
     proxies = None 
     
@@ -34,11 +34,14 @@ def fetch_and_deduplicate():
             
             links = re.finditer(r'(vless|vmess)://[^\s]+', text)
             for match in links:
-                configs.add(match.group(0))
+                raw_link = match.group(0)
+                # جدا کردن نام کانفیگ (Remark) برای مقایسه دقیق‌تر دیتای اصلی
+                clean_link = raw_link.split('#')[0]
+                configs.add(clean_link)
         except Exception as e:
             print(f"Failed to fetch {url}: {e}")
             
-    print(f"Total unique configs found: {len(configs)}")
+    print(f"Total unique configs found (ignoring names): {len(configs)}")
     return list(configs)
 
 def get_host_port(uri):
@@ -58,14 +61,20 @@ def tcp_ping(uri):
     if not host or not port:
         return False
     try:
+        start_time = time.perf_counter()
         sock = socket.create_connection((host, port), timeout=2)
         sock.close()
+        ping_ms = (time.perf_counter() - start_time) * 1000
+        
+        # فیلتر کردن پینگ‌های غیرمنطقی و فیک (کمتر از 5 میلی‌ثانیه)
+        if ping_ms < 5:
+            return False
+            
         return True
     except:
         return False
 
 def create_xray_config(uri, local_port):
-    """ساخت فایل کانفیگ با ورودی HTTP به جای SOCKS برای سازگاری کامل پایتون"""
     try:
         if uri.startswith('vless://'):
             parsed = urlparse(uri)
@@ -187,9 +196,10 @@ def check_with_xray(uri, local_port):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
-        time.sleep(1.5) 
         
-        # در صورتی که هسته Xray به خاطر ساختار خراب کانفیگ کرش کرده باشد
+        # افزایش سرعت: کاهش زمان صبر برای بالا آمدن هسته از 1.5 به 0.6 ثانیه
+        time.sleep(0.6) 
+        
         if proc.poll() is not None:
             return False
 
@@ -198,7 +208,6 @@ def check_with_xray(uri, local_port):
             'https': f'http://127.0.0.1:{local_port}'
         }
         
-        # استفاده از آدرس‌های بسیار سریع که خطای 204 (No Content) برمی‌گردانند
         test_urls = [
             'http://www.gstatic.com/generate_204',
             'http://cp.cloudflare.com/generate_204'
@@ -206,7 +215,8 @@ def check_with_xray(uri, local_port):
         
         for url in test_urls:
             try:
-                response = requests.get(url, proxies=proxies, timeout=5)
+                # افزایش سرعت: کاهش تایم‌اوت تست از 5 به 3 ثانیه
+                response = requests.get(url, proxies=proxies, timeout=3)
                 if response.status_code == 204:
                     return True
             except requests.exceptions.RequestException:
@@ -217,7 +227,7 @@ def check_with_xray(uri, local_port):
     finally:
         if proc:
             proc.terminate()
-            proc.wait() # آزادسازی کامل پورت‌ها
+            proc.wait() 
         try:
             os.unlink(config_file)
         except:
@@ -238,11 +248,12 @@ def main():
             if is_alive:
                 tcp_alive.append(config)
                 
-    print(f"Configs passed TCP Ping: {len(tcp_alive)}")
+    print(f"Configs passed TCP Ping (Normal limits): {len(tcp_alive)}")
 
     with open('/app/data/all_configs.txt', 'w') as f:
         for c in tcp_alive:
-            f.write(c + '\n')
+            # می‌توانیم اسم دیفالت یا رندوم به کانفیگ‌های بدون اسم اضافه کنیم
+            f.write(c + '#Scanned_Config\n')
     print("Saved TCP alive configs to all_configs.txt")
 
     print("Phase 3: Deep HTTP Testing with Xray...")
@@ -254,15 +265,17 @@ def main():
             return config
         return None
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    # افزایش سرعت: افزایش ورکرهای همزمان از 10 به 20
+    with ThreadPoolExecutor(max_workers=20) as executor:
         results = list(executor.map(check_http, enumerate(tcp_alive)))
         working_configs = [c for c in results if c]
 
     print(f"\n✅ Final Working Configs: {len(working_configs)}")
     
     with open('/app/data/working.txt', 'w') as f:
-        for c in working_configs:
-            f.write(c + '\n')
+        for i, c in enumerate(working_configs):
+            # بازگرداندن یک اسم تمیز و شماره‌گذاری شده برای خروجی نهایی
+            f.write(f"{c}#Working_Config_{i+1}\n")
             
 if __name__ == "__main__":
     main()
