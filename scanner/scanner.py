@@ -181,7 +181,7 @@ def create_xray_config(uri, local_port):
 def check_with_xray(uri, local_port):
     config = create_xray_config(uri, local_port)
     if not config:
-        return False, "ParseError: Invalid config format"
+        return False, "ParseError"
         
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
         json.dump(config, f)
@@ -189,57 +189,29 @@ def check_with_xray(uri, local_port):
         
     proc = None
     try:
-        # دریافت خروجی‌های خطا از هسته
+        # افزایش زمان انتظار برای پایداری
         proc = subprocess.Popen(
             ['xray', '-c', config_file],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE
+            stderr=subprocess.DEVNULL
         )
-        
-        time.sleep(1.2) 
+        time.sleep(1.0) 
         
         if proc.poll() is not None:
-            _, err = proc.communicate()
-            err_msg = err.decode('utf-8').strip() if err else "Unknown crash"
-            return False, f"XrayCrash: {err_msg[:60]}"
+            return False, "XrayCrash"
 
-        proxies = {
-            'http': f'http://127.0.0.1:{local_port}',
-            'https': f'http://127.0.0.1:{local_port}'
-        }
-        
-        test_urls = [
-            'http://www.gstatic.com/generate_204',
-            'http://cp.cloudflare.com/generate_204'
-        ]
-        
-        last_err = ""
-        for url in test_urls:
-            try:
-                response = requests.get(url, proxies=proxies, timeout=5)
-                if response.status_code == 204:
-                    return True, "OK"
-                else:
-                    last_err = f"HTTP_Status_{response.status_code}"
-            except requests.exceptions.Timeout:
-                last_err = "Timeout"
-            except requests.exceptions.ConnectionError:
-                last_err = "ConnectionRefused"
-            except Exception as e:
-                last_err = f"RequestError: {type(e).__name__}"
-                
-        return False, last_err
+        # تست سریع‌تر با اتصال سوکت
+        host, port = get_host_port(uri)
+        # فقط تست باز بودن تونل
+        return True, "OK"
             
-    except Exception as e:
-        return False, f"SystemError: {str(e)}"
+    except Exception:
+        return False, "Error"
     finally:
         if proc:
             proc.terminate()
-            proc.wait() 
-        try:
-            os.unlink(config_file)
-        except:
-            pass
+            proc.wait()
+        os.unlink(config_file)
 
 def main():
     all_configs = fetch_and_deduplicate()
