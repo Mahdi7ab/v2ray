@@ -35,7 +35,6 @@ def fetch_and_deduplicate():
             links = re.finditer(r'(vless|vmess)://[^\s]+', text)
             for match in links:
                 raw_link = match.group(0)
-                # جدا کردن نام کانفیگ (Remark) برای مقایسه دقیق‌تر دیتای اصلی
                 clean_link = raw_link.split('#')[0]
                 configs.add(clean_link)
         except Exception as e:
@@ -66,7 +65,6 @@ def tcp_ping(uri):
         sock.close()
         ping_ms = (time.perf_counter() - start_time) * 1000
         
-        # فیلتر کردن پینگ‌های غیرمنطقی و فیک (کمتر از 5 میلی‌ثانیه)
         if ping_ms < 5:
             return False
             
@@ -183,7 +181,7 @@ def create_xray_config(uri, local_port):
 def check_with_xray(uri, local_port):
     config = create_xray_config(uri, local_port)
     if not config:
-        return False
+        return False, "ParseError: Invalid config format"
         
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
         json.dump(config, f)
@@ -191,17 +189,19 @@ def check_with_xray(uri, local_port):
         
     proc = None
     try:
+        # دریافت خروجی‌های خطا از هسته
         proc = subprocess.Popen(
             ['xray', '-c', config_file],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.PIPE
         )
         
-        # افزایش سرعت: کاهش زمان صبر برای بالا آمدن هسته از 1.5 به 0.6 ثانیه
-        time.sleep(0.6) 
+        time.sleep(1.2) 
         
         if proc.poll() is not None:
-            return False
+            _, err = proc.communicate()
+            err_msg = err.decode('utf-8').strip() if err else "Unknown crash"
+            return False, f"XrayCrash: {err_msg[:60]}"
 
         proxies = {
             'http': f'http://127.0.0.1:{local_port}',
@@ -213,17 +213,25 @@ def check_with_xray(uri, local_port):
             'http://cp.cloudflare.com/generate_204'
         ]
         
+        last_err = ""
         for url in test_urls:
             try:
-                # افزایش سرعت: کاهش تایم‌اوت تست از 5 به 3 ثانیه
-                response = requests.get(url, proxies=proxies, timeout=3)
+                response = requests.get(url, proxies=proxies, timeout=5)
                 if response.status_code == 204:
-                    return True
-            except requests.exceptions.RequestException:
-                continue
+                    return True, "OK"
+                else:
+                    last_err = f"HTTP_Status_{response.status_code}"
+            except requests.exceptions.Timeout:
+                last_err = "Timeout"
+            except requests.exceptions.ConnectionError:
+                last_err = "ConnectionRefused"
+            except Exception as e:
+                last_err = f"RequestError: {type(e).__name__}"
+                
+        return False, last_err
             
-    except Exception:
-        pass
+    except Exception as e:
+        return False, f"SystemError: {str(e)}"
     finally:
         if proc:
             proc.terminate()
@@ -232,8 +240,6 @@ def check_with_xray(uri, local_port):
             os.unlink(config_file)
         except:
             pass
-            
-    return False
 
 def main():
     all_configs = fetch_and_deduplicate()
@@ -252,30 +258,45 @@ def main():
 
     with open('/app/data/all_configs.txt', 'w') as f:
         for c in tcp_alive:
-            # می‌توانیم اسم دیفالت یا رندوم به کانفیگ‌های بدون اسم اضافه کنیم
             f.write(c + '#Scanned_Config\n')
     print("Saved TCP alive configs to all_configs.txt")
 
-    print("Phase 3: Deep HTTP Testing with Xray...")
+    print("Phase 3: Deep HTTP Testing with Xray (DEBUG MODE)...")
+    working_configs = []
+    error_stats = {}
+    error_log_lines = []
     
     def check_http(args):
         index, config = args
         local_port = 10000 + index
-        if check_with_xray(config, local_port):
-            return config
-        return None
+        success, reason = check_with_xray(config, local_port)
+        return config, success, reason
 
-    # افزایش سرعت: افزایش ورکرهای همزمان از 10 به 20
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    # کاهش ورکرها برای جلوگیری از افت کیفیت کانکشن‌ها
+    with ThreadPoolExecutor(max_workers=15) as executor:
         results = list(executor.map(check_http, enumerate(tcp_alive)))
-        working_configs = [c for c in results if c]
+        
+    for config, success, reason in results:
+        if success:
+            working_configs.append(config)
+        else:
+            error_stats[reason] = error_stats.get(reason, 0) + 1
+            error_log_lines.append(f"[{reason}] -> {config[:60]}...")
 
     print(f"\n✅ Final Working Configs: {len(working_configs)}")
     
+    print("\n--- DEBUG SUMMARY ---")
+    # نمایش ۱۰ خطای پرتکرار برای عیب‌یابی
+    for err, count in sorted(error_stats.items(), key=lambda x: x[1], reverse=True)[:10]:
+        print(f" ❌ {err}: {count} configs")
+    print("---------------------\n")
+    
     with open('/app/data/working.txt', 'w') as f:
         for i, c in enumerate(working_configs):
-            # بازگرداندن یک اسم تمیز و شماره‌گذاری شده برای خروجی نهایی
             f.write(f"{c}#Working_Config_{i+1}\n")
             
+    with open('/app/data/error_log.txt', 'w') as f:
+        f.write("\n".join(error_log_lines))
+
 if __name__ == "__main__":
     main()
