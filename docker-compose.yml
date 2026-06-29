@@ -1,0 +1,32 @@
+services:
+  v2raya:
+    image: mzz2017/v2raya
+    container_name: v2raya
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+    environment:
+      V2RAYA_V2RAY_BIN: /usr/local/bin/xray
+      V2RAYA_ADDRESS: 0.0.0.0:2017
+    volumes:
+      - ./v2raya/data:/etc/v2raya
+      - /lib/modules:/lib/modules:ro
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+
+  xray-server:
+    image: teddysun/xray
+    container_name: xray-server
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./v2raya/xray/config.json:/etc/xray/config.json:ro
+
+  config-scanner:
+    build: ./scanner
+    container_name: config-scanner
+    restart: "no"
+    network_mode: host
+    volumes:
+      - ./free-configs:/app/data # مپ کردن به پوشه free-config

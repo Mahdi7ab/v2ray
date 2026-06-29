@@ -1,0 +1,8 @@
+# V2RayA Database
+v2raya/data/
+v2raya/xray/
+
+# Python Caches
+**/__pycache__/
+*.pyc
+*.db
