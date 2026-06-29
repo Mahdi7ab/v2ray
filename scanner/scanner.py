@@ -11,8 +11,7 @@ from urllib.parse import urlparse, parse_qs
 from concurrent.futures import ThreadPoolExecutor
 
 SUBSCRIPTION_URLS = [
-    "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/separated-protocols-chunks/vless/EbraSha-Protocol-Chunks-vless-001.txt",
-    "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/separated-protocols-chunks/vless/EbraSha-Protocol-Chunks-vless-002.txt",
+    "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/V2Ray-Config-By-EbraSha.txt",
 ]
 
 def decode_base64(data):
@@ -136,7 +135,7 @@ def create_xray_config(uri, local_port):
 
 def check_with_xray(uri, local_port):
     config = create_xray_config(uri, local_port)
-    if not config: return False
+    if not config: return False, "ParseError"
         
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
         json.dump(config, f)
@@ -144,24 +143,34 @@ def check_with_xray(uri, local_port):
         
     proc = None
     try:
-        proc = subprocess.Popen(['xray', '-c', config_file], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(1.2) # زمان کافی برای باز شدن پورت
+        proc = subprocess.Popen(['xray', '-c', config_file], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        # زمان صبر برای بالا آمدن هسته بیشتر شد
+        time.sleep(2.0) 
         
-        if proc.poll() is not None: return False
+        if proc.poll() is not None: 
+            return False, "XrayCrash"
 
         proxies = {'http': f'http://127.0.0.1:{local_port}', 'https': f'http://127.0.0.1:{local_port}'}
-        # تست با تایم‌اوت بالا برای سرورهای دوردست
-        resp = requests.get('http://cp.cloudflare.com/generate_204', proxies=proxies, timeout=5)
-        if resp.status_code == 204: return True
-    except:
-        pass
+        
+        # تایم‌اوت تست HTTP به ۸ ثانیه افزایش یافت (سرورهای رایگان کند هستند)
+        resp = requests.get('http://www.gstatic.com/generate_204', proxies=proxies, timeout=8)
+        if resp.status_code == 204: 
+            return True, "OK"
+        else:
+            return False, f"HTTP_Status_{resp.status_code}"
+            
+    except requests.exceptions.Timeout:
+        return False, "Timeout (Blocked/Too Slow)"
+    except requests.exceptions.ConnectionError:
+        return False, "Connection Refused (DPI Drop)"
+    except Exception as e:
+        return False, "Error"
     finally:
         if proc:
             proc.terminate()
             proc.wait() 
         try: os.unlink(config_file)
         except: pass
-    return False
 
 def main():
     all_configs = fetch_and_deduplicate()
@@ -180,32 +189,40 @@ def main():
         for i, c in enumerate(tcp_alive):
             f.write(f"{c}#Pinged_{i+1}\n")
 
-    print("Phase 3: Deep HTTP Testing with Xray (Safe Mode)...")
-    print("This might take a few minutes. Please wait...")
+    print("Phase 3: Deep HTTP Testing (Timeout Increased)...")
+    
+    working_configs = []
+    error_stats = {}
     
     def check_http(args):
         index, config = args
-        # استفاده از پورت‌های داینامیک برای جلوگیری از تداخل
         local_port = 15000 + index 
-        if check_with_xray(config, local_port):
-            return config
-        return None
+        success, reason = check_with_xray(config, local_port)
+        return config, success, reason
 
-    # !!! ورکرها روی 5 تنظیم شده تا پردازنده سرور ایران کم نیاورد !!!
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    # تعداد ورکرها روی ۸ برای تعادل بین سرعت و پایداری
+    with ThreadPoolExecutor(max_workers=8) as executor:
         results = list(executor.map(check_http, enumerate(tcp_alive)))
-        working_configs = [c for c in results if c]
+        
+    for config, success, reason in results:
+        if success:
+            working_configs.append(config)
+        else:
+            error_stats[reason] = error_stats.get(reason, 0) + 1
 
     print(f"\n✅ Final REAL Working Configs: {len(working_configs)}")
     
-    # --- مرحله کلیدی: تبدیل به Base64 برای سازگاری ۱۰۰٪ با V2RayA ---
+    print("\n--- DPI & ERROR SUMMARY ---")
+    for err, count in sorted(error_stats.items(), key=lambda x: x[1], reverse=True)[:5]:
+        print(f" ❌ {err}: {count} configs")
+    print("---------------------------\n")
+    
     final_output = []
     for i, c in enumerate(working_configs):
         final_output.append(f"{c}#Working_Real_{i+1}")
         
     final_text = "\n".join(final_output)
     
-    # اگر خروجی داشتیم، آن را کدگذاری کن، در غیر این صورت فایل خالی بگذار
     if final_text.strip():
         b64_encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
     else:
