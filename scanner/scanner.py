@@ -12,12 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 SUBSCRIPTION_URLS = [
     "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/V2Ray-Config-By-EbraSha.txt",
-    "https://github.com/ebrasha/free-v2ray-public-list/raw/refs/heads/main/separated-protocols-chunks/vless/EbraSha-Protocol-Chunks-vless-004.txt",
-    "https://github.com/ebrasha/free-v2ray-public-list/raw/refs/heads/main/separated-protocols-chunks/vless/EbraSha-Protocol-Chunks-vless-008.txt",
-    "https://github.com/ebrasha/free-v2ray-public-list/raw/refs/heads/main/separated-protocols-chunks/vless/EbraSha-Protocol-Chunks-vless-015.txt",
-    "https://github.com/ebrasha/free-v2ray-public-list/raw/refs/heads/main/separated-protocols-chunks/vless/EbraSha-Protocol-Chunks-vless-016.txt",
-    "https://github.com/ebrasha/free-v2ray-public-list/raw/refs/heads/main/separated-protocols-chunks/vless/EbraSha-Protocol-Chunks-vless-023.txt",
-    "https://github.com/ebrasha/free-v2ray-public-list/raw/refs/heads/main/separated-protocols-chunks/vless/EbraSha-Protocol-Chunks-vless-042.txt",
+    "https://raw.githubusercontent.com/V2RayRoot/V2RayConfig/refs/heads/main/Config/vless.txt",
 ]
 
 def decode_base64(data):
