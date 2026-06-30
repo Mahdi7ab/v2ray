@@ -159,7 +159,7 @@ def check_with_xray(uri, local_port):
         proxies = {'http': f'http://127.0.0.1:{local_port}', 'https': f'http://127.0.0.1:{local_port}'}
         
         # تایم‌اوت تست HTTP به ۸ ثانیه افزایش یافت (سرورهای رایگان کند هستند)
-        resp = requests.get('http://www.gstatic.com/generate_204', proxies=proxies, timeout=10)
+        resp = requests.get('https://www.google.com/generate_204', proxies=proxies, timeout=10)
         if resp.status_code == 204: 
             return True, "OK"
         else:
