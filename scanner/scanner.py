@@ -11,8 +11,9 @@ from urllib.parse import urlparse, parse_qs
 from concurrent.futures import ThreadPoolExecutor
 
 SUBSCRIPTION_URLS = [
-    "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/V2Ray-Config-By-EbraSha.txt",
     "https://raw.githubusercontent.com/V2RayRoot/V2RayConfig/refs/heads/main/Config/vless.txt",
+    "https://raw.githubusercontent.com/MahanKenway/Freedom-V2Ray/refs/heads/main/configs/vless.txt",
+    "https://raw.githubusercontent.com/Mahdi7ab/v2ray/refs/heads/main/free-configs/all_configs.txt",
 ]
 
 def decode_base64(data):
