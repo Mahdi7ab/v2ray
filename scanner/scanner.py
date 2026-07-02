@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 SUBSCRIPTION_URLS = [
     "https://raw.githubusercontent.com/V2RayRoot/V2RayConfig/refs/heads/main/Config/vless.txt",
     "https://raw.githubusercontent.com/MahanKenway/Freedom-V2Ray/refs/heads/main/configs/vless.txt",
+    "https://raw.githubusercontent.com/Delta-Kronecker/V2ray-Config/refs/heads/main/config/protocols/vless.txt",
     "https://raw.githubusercontent.com/Mahdi7ab/v2ray/refs/heads/main/free-configs/all_configs.txt",
 ]
 
