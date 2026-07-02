@@ -72,11 +72,18 @@ def tcp_ping(uri):
     if not host or not port: return False
     try:
         start = time.perf_counter()
-        sock = socket.create_connection((host, port), timeout=2)
+        # کاهش تایم‌اوت سوکت به ۱.۵ ثانیه برای فیلتر سریع‌تر
+        sock = socket.create_connection((host, port), timeout=1.5)
         sock.close()
-        if (time.perf_counter() - start) * 1000 < 5: return False
+        ping_ms = (time.perf_counter() - start) * 1000
+        
+        # حذف پینگ‌های کمتر از 5ms (فیک) و بیشتر از 800ms (بسیار کند)
+        if ping_ms < 5 or ping_ms > 800: 
+            return False
+            
         return True
-    except: return False
+    except: 
+        return False
 
 def create_xray_config(uri, local_port):
     try:
@@ -147,16 +154,15 @@ def check_with_xray(uri, local_port):
     proc = None
     try:
         proc = subprocess.Popen(['xray', '-c', config_file], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        # زمان صبر برای بالا آمدن هسته بیشتر شد
-        time.sleep(2.0) 
+        time.sleep(1.2) 
         
         if proc.poll() is not None: 
             return False, "XrayCrash"
 
         proxies = {'http': f'http://127.0.0.1:{local_port}', 'https': f'http://127.0.0.1:{local_port}'}
         
-        # تایم‌اوت تست HTTP به ۸ ثانیه افزایش یافت (سرورهای رایگان کند هستند)
-        resp = requests.get('https://www.google.com/generate_204', proxies=proxies, timeout=10)
+        # Fast-Fail: کاهش تایم‌اوت به ۴ ثانیه برای رد کردن سریع کانفیگ‌های سوخته
+        resp = requests.get('http://www.gstatic.com/generate_204', proxies=proxies, timeout=4)
         if resp.status_code == 204: 
             return True, "OK"
         else:
@@ -179,9 +185,10 @@ def main():
     all_configs = fetch_and_deduplicate()
     if not all_configs: return
 
-    print("Phase 2: TCP Ping scanning...")
+    print("Phase 2: TCP Ping scanning (Optimized Latency Filter)...")
     tcp_alive = []
-    with ThreadPoolExecutor(max_workers=50) as executor:
+    # افزایش ورکرها در فاز ۲ برای سرعت بیشتر
+    with ThreadPoolExecutor(max_workers=100) as executor:
         results = list(executor.map(tcp_ping, all_configs))
         for config, is_alive in zip(all_configs, results):
             if is_alive: tcp_alive.append(config)
@@ -192,7 +199,7 @@ def main():
         for i, c in enumerate(tcp_alive):
             f.write(f"{c}#Pinged_{i+1}\n")
 
-    print("Phase 3: Deep HTTP Testing (Timeout Increased)...")
+    print("Phase 3: Deep HTTP Testing (Fast-Fail Mode)...")
     
     working_configs = []
     error_stats = {}
@@ -203,8 +210,8 @@ def main():
         success, reason = check_with_xray(config, local_port)
         return config, success, reason
 
-    # تعداد ورکرها روی ۸ برای تعادل بین سرعت و پایداری
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    # افزایش ورکرها به 12 برای تسریع اسکن
+    with ThreadPoolExecutor(max_workers=12) as executor:
         results = list(executor.map(check_http, enumerate(tcp_alive)))
         
     for config, success, reason in results:
