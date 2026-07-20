@@ -13,7 +13,7 @@ echo "Scanner finished. Pushing to GitHub..."
 
 git add free-configs/working.txt
 git add free-configs/all_configs.txt
-git add update.sh
+git add free-configs/gemini_configs.txt
 
 git commit -m "Auto-update configs: $(date '+%Y-%m-%d %H:%M:%S')"
 git push origin main
