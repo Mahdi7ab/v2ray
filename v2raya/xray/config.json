@@ -4,7 +4,7 @@
   },
   "inbounds": [
     {
-      "port": 10086,
+      "port": 443,
       "protocol": "vmess",
       "settings": {
         "clients": [
@@ -21,15 +21,8 @@
   ],
   "outbounds": [
     {
-      "protocol": "socks",
-      "settings": {
-        "servers": [
-          {
-            "address": "127.0.0.1",
-            "port": 20170
-          }
-        ]
-      }
+      "protocol": "freedom",
+      "tag": "direct"
     }
   ]
 }
